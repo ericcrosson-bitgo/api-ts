@@ -21,17 +21,17 @@
     "fp-ts": "2.11.8",
     "io-ts": "2.2.16",
     "io-ts-types": "0.5.16",
-    "monocle-ts": "2.3.10",
-    "newtype-ts": "0.3.4"
+    "monocle-ts": "2.3.13",
+    "newtype-ts": "0.3.5"
   },
   "devDependencies": {
-    "@types/chai": "4.2.12",
-    "@types/mocha": "9.0.0",
-    "chai": "4.2.0",
-    "mocha": "9.0.3",
+    "@types/chai": "4.3.1",
+    "@types/mocha": "9.1.1",
+    "chai": "4.3.6",
+    "mocha": "10.0.0",
     "nyc": "15.1.0",
-    "ts-node": "10.4.0",
-    "typescript": "4.5.5"
+    "ts-node": "10.7.0",
+    "typescript": "4.6.4"
   },
   "publishConfig": {
     "access": "public"
