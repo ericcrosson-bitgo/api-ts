@@ -21,6 +21,8 @@ export type ResponseEncoder = (
 ) => express.RequestHandler;
 
 export const defaultResponseEncoder: ResponseEncoder =
+  // DISCUSS: can we infer the response code to use?
+  // What pitfalls lie down that road?
   (route, serviceFnResponse) => (_req, res) => {
     const { type, payload } = serviceFnResponse;
     const status = typeof type === 'number' ? type : (KeyToHttpStatus as any)[type];

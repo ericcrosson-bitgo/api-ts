@@ -2,36 +2,25 @@ import test from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import * as t from 'io-ts';
-import express from 'express';
+import { flow } from 'fp-ts/lib/function';
 import supertest from 'supertest';
 
-import {
-  type ApiSpec,
-  apiSpec,
-  httpRequest,
-  httpRoute,
-  optional,
-} from '@api-ts/io-ts-http';
+import { type ApiSpec, apiSpec, httpRequest, httpRoute } from '@api-ts/io-ts-http';
 import { buildApiClient, supertestRequestFactory } from '@api-ts/superagent-wrapper';
 
-import { createServer, middlewareFn, routeHandler } from '../src';
+import { createServer } from '../src';
 
 const PutHello = httpRoute({
   path: '/hello',
   method: 'PUT',
-  // DISCUSS: what about req.user?
-  // and more generally, things that aren't in headers/body/query/route
   request: httpRequest({
     body: {
       secretCode: t.number,
-      appMiddlewareRan: optional(t.boolean),
     },
   }),
   response: {
-    // TODO: create prettier names for these codecs at the io-ts-http level
     200: t.type({
       message: t.string,
-      appMiddlewareRan: t.boolean,
       routeMiddlewareRan: t.boolean,
     }),
     400: t.type({
@@ -66,21 +55,25 @@ const ApiSpec = apiSpec({
   },
 });
 
-const appMiddleware: express.RequestHandler = (req, _res, next) => {
-  req.body.appMiddlewareRan = true;
-  next();
-};
+// import * as T from 'fp-ts/lib/Task';
+// function invokeTask<T>(task: T.Task<T>): Promise<T> {
+//   return task();
+// }
 
-const routeMiddleware = middlewareFn(async () => {
-  return { routeMiddlewareRan: true };
-});
+function routeMiddleware<T>(data: T): T & { routeMiddlewareRan: boolean } {
+  return {
+    ...data,
+    routeMiddlewareRan: true,
+  };
+}
 
 // DISCUSS: defining a RouteHandler type or something (also used in decodeRequestAndEncodeResponse)
-const CreateHelloWorld = async (parameters: {
+const CreateHelloWorld = (parameters: {
   secretCode: number;
   appMiddlewareRan?: boolean;
   routeMiddlewareRan?: boolean;
 }) => {
+  // DISCUSS: can we infer the response type from the codec?
   if (parameters.secretCode === 0) {
     return {
       type: 400,
@@ -109,13 +102,10 @@ const GetHelloWorld = async (params: { id: string }) =>
   }) as const;
 
 test('should offer a delightful developer experience', async () => {
-  const app = createServer(ApiSpec, (app: express.Application) => {
-    // Configure app-level middleware
-    app.use(express.json());
-    app.use(appMiddleware);
+  const app = createServer(ApiSpec, () => {
     return {
       'hello.world': {
-        put: routeHandler({ middleware: [routeMiddleware], handler: CreateHelloWorld }),
+        put: flow(routeMiddleware, (a) => CreateHelloWorld(a)),
         get: GetHelloWorld,
       },
     };
@@ -139,12 +129,10 @@ test('should offer a delightful developer experience', async () => {
 });
 
 test('should handle io-ts-http formatted path parameters', async () => {
-  const app = createServer(ApiSpec, (app: express.Application) => {
-    app.use(express.json());
-    app.use(appMiddleware);
+  const app = createServer(ApiSpec, () => {
     return {
       'hello.world': {
-        put: routeHandler({ middleware: [routeMiddleware], handler: CreateHelloWorld }),
+        put: flow(routeMiddleware, CreateHelloWorld),
         get: GetHelloWorld,
       },
     };
@@ -161,38 +149,11 @@ test('should handle io-ts-http formatted path parameters', async () => {
   assert.equal(response.id, '1337');
 });
 
-test('should invoke app-level middleware', async () => {
-  const app = createServer(ApiSpec, (app: express.Application) => {
-    // Configure app-level middleware
-    app.use(express.json());
-    app.use(appMiddleware);
-    return {
-      'hello.world': {
-        put: CreateHelloWorld,
-        get: GetHelloWorld,
-      },
-    };
-  });
-
-  const server = supertest(app);
-  const apiClient = buildApiClient(supertestRequestFactory(server), ApiSpec);
-
-  const response = await apiClient['hello.world']
-    .put({ secretCode: 1000 })
-    .decodeExpecting(200)
-    .then((res) => res.body);
-
-  assert.equal(response.message, "Who's there?");
-  assert.equal(response.appMiddlewareRan, true);
-});
-
 test('should invoke route-level middleware', async () => {
-  const app = createServer(ApiSpec, (app: express.Application) => {
-    // Configure app-level middleware
-    app.use(express.json());
+  const app = createServer(ApiSpec, () => {
     return {
       'hello.world': {
-        put: routeHandler({ middleware: [routeMiddleware], handler: CreateHelloWorld }),
+        put: flow(routeMiddleware, CreateHelloWorld),
         get: GetHelloWorld,
       },
     };
@@ -210,34 +171,8 @@ test('should invoke route-level middleware', async () => {
   assert.equal(response.routeMiddlewareRan, true);
 });
 
-test('should not add parameters from middleware unless routeHandler() is used', async () => {
-  const app = createServer(ApiSpec, (app: express.Application) => {
-    // Configure app-level middleware
-    app.use(express.json());
-    return {
-      'hello.world': {
-        put: { middleware: [routeMiddleware], handler: CreateHelloWorld },
-        get: GetHelloWorld,
-      },
-    };
-  });
-
-  const server = supertest(app);
-  const apiClient = buildApiClient(supertestRequestFactory(server), ApiSpec);
-
-  const response = await apiClient['hello.world']
-    .put({ secretCode: 1000 })
-    .decodeExpecting(200)
-    .then((res) => res.body);
-
-  assert.equal(response.message, "Who's there?");
-  assert.equal(response.routeMiddlewareRan, false);
-});
-
 test('should infer status code from response type', async () => {
-  const app = createServer(ApiSpec, (app: express.Application) => {
-    // Configure app-level middleware
-    app.use(express.json());
+  const app = createServer(ApiSpec, () => {
     return {
       'hello.world': {
         put: CreateHelloWorld,
@@ -258,9 +193,7 @@ test('should infer status code from response type', async () => {
 });
 
 test('should return a 400 when request fails to decode', async () => {
-  const app = createServer(ApiSpec, (app: express.Application) => {
-    // Configure app-level middleware
-    app.use(express.json());
+  const app = createServer(ApiSpec, () => {
     return {
       'hello.world': {
         put: CreateHelloWorld,
@@ -276,3 +209,5 @@ test('should return a 400 when request fails to decode', async () => {
 
   assert(response.body.error.startsWith('Invalid value undefined supplied to'));
 });
+
+// TODO: add a test of async (like with tasks or task eithers)

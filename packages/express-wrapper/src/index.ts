@@ -11,9 +11,8 @@ import { createRouter } from '@api-ts/typed-express-router';
 import { handleRequest, onDecodeError, onEncodeError, RouteHandler } from './request';
 import { defaultResponseEncoder, ResponseEncoder } from './response';
 
-export { middlewareFn, MiddlewareChain, MiddlewareChainOutput } from './middleware';
 export type { ResponseEncoder, KeyedResponseType } from './response';
-export { routeHandler, ServiceFunction } from './request';
+export { RouteHandler } from './request';
 
 type CreateRouterProps<Spec extends ApiSpec> = {
   spec: Spec;
@@ -32,6 +31,7 @@ export function routerForApiSpec<Spec extends ApiSpec>({
   routeHandlers,
   encoder = defaultResponseEncoder,
 }: CreateRouterProps<Spec>) {
+  // NOTE: This calls out to typed-express-router, may not be desired
   const router = createRouter(spec, {
     onDecodeError,
     onEncodeError,
@@ -39,6 +39,8 @@ export function routerForApiSpec<Spec extends ApiSpec>({
   for (const apiName of Object.keys(spec)) {
     const resource = spec[apiName] as Spec[string];
     for (const method of Object.keys(resource)) {
+      // DISCUSS: should this be a error? It represents a misconfiguration, so
+      // should the app fail on start-up?
       if (!HttpMethod.is(method)) {
         continue;
       }
@@ -72,6 +74,7 @@ export const createServer = <Spec extends ApiSpec>(
   const app = express();
   const routeHandlers = configureExpressApplication(app);
   const router = routerForApiSpec({ spec, routeHandlers });
+  app.use(express.json());
   app.use(router);
   return app;
 };
