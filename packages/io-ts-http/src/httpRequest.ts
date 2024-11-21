@@ -37,7 +37,7 @@ type EmitOutputTypeErrors<
   : {
       [K in keyof P & string]: P[K] extends t.Type<any, O, any>
         ? P[K]
-        : `Codec's output type is not assignable to \`${OName}\`. Try using one like \`NumberFromString\``;
+        : `Codec's output type is not assignable to \`${OName}\`. Try using a codec like \`NumberFromString\``;
     };
 
 type QueryValue = string | string[] | undefined;
